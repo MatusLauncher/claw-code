@@ -39,11 +39,7 @@ pub fn should_compact(session: &Session, config: CompactionConfig) -> bool {
     let compactable = &session.messages[start..];
 
     compactable.len() > config.preserve_recent_messages
-        && compactable
-            .iter()
-            .map(estimate_message_tokens)
-            .sum::<usize>()
-            >= config.max_estimated_tokens
+        && estimate_session_tokens(session) >= config.max_estimated_tokens
 }
 
 #[must_use]
@@ -642,7 +638,7 @@ mod tests {
     }
 
     #[test]
-    fn ignores_existing_compacted_summary_when_deciding_to_recompact() {
+    fn skips_compaction_when_no_compactable_messages_beyond_preserve_count() {
         let summary = "<summary>Conversation summary:\n- Scope: earlier work preserved.\n- Key timeline:\n  - user: large preserved context\n</summary>";
         let session = Session {
             version: 1,

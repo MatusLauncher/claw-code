@@ -852,8 +852,6 @@ struct TodoWriteOutput {
     old_todos: Vec<TodoItem>,
     #[serde(rename = "newTodos")]
     new_todos: Vec<TodoItem>,
-    #[serde(rename = "verificationNudgeNeeded")]
-    verification_nudge_needed: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1403,18 +1401,9 @@ fn execute_todo_write(input: TodoWriteInput) -> Result<TodoWriteOutput, String> 
     )
     .map_err(|error| error.to_string())?;
 
-    let verification_nudge_needed = (all_done
-        && input.todos.len() >= 3
-        && !input
-            .todos
-            .iter()
-            .any(|todo| todo.content.to_lowercase().contains("verif")))
-    .then_some(true);
-
     Ok(TodoWriteOutput {
         old_todos,
         new_todos: input.todos,
-        verification_nudge_needed,
     })
 }
 
@@ -3391,11 +3380,10 @@ mod tests {
             second_output["newTodos"].as_array().expect("array").len(),
             3
         );
-        assert!(second_output["verificationNudgeNeeded"].is_null());
     }
 
     #[test]
-    fn todo_write_rejects_invalid_payloads_and_sets_verification_nudge() {
+    fn todo_write_rejects_invalid_payloads() {
         let _guard = env_lock()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -3429,22 +3417,8 @@ mod tests {
         .expect_err("blank content should fail");
         assert!(blank_content.contains("todo content must not be empty"));
 
-        let nudge = execute_tool(
-            "TodoWrite",
-            &json!({
-                "todos": [
-                    {"content": "Write tests", "activeForm": "Writing tests", "status": "completed"},
-                    {"content": "Fix errors", "activeForm": "Fixing errors", "status": "completed"},
-                    {"content": "Ship branch", "activeForm": "Shipping branch", "status": "completed"}
-                ]
-            }),
-        )
-        .expect("completed todos should succeed");
         std::env::remove_var("CLAW_TODO_STORE");
         let _ = fs::remove_file(path);
-
-        let output: serde_json::Value = serde_json::from_str(&nudge).expect("valid json");
-        assert_eq!(output["verificationNudgeNeeded"], true);
     }
 
     #[test]

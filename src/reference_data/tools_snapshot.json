@@ -700,11 +700,6 @@
     "responsibility": "Tool module mirrored from archived TypeScript path tools/SleepTool/prompt.ts"
   },
   {
-    "name": "SyntheticOutputTool",
-    "source_hint": "tools/SyntheticOutputTool/SyntheticOutputTool.ts",
-    "responsibility": "Tool module mirrored from archived TypeScript path tools/SyntheticOutputTool/SyntheticOutputTool.ts"
-  },
-  {
     "name": "TaskCreateTool",
     "source_hint": "tools/TaskCreateTool/TaskCreateTool.ts",
     "responsibility": "Tool module mirrored from archived TypeScript path tools/TaskCreateTool/TaskCreateTool.ts"
@@ -908,11 +903,6 @@
     "name": "spawnMultiAgent",
     "source_hint": "tools/shared/spawnMultiAgent.ts",
     "responsibility": "Tool module mirrored from archived TypeScript path tools/shared/spawnMultiAgent.ts"
-  },
-  {
-    "name": "TestingPermissionTool",
-    "source_hint": "tools/testing/TestingPermissionTool.tsx",
-    "responsibility": "Tool module mirrored from archived TypeScript path tools/testing/TestingPermissionTool.tsx"
   },
   {
     "name": "utils",
