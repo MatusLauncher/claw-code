@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 use crate::compact::{
-    compact_session, estimate_session_tokens, CompactionConfig, CompactionResult,
+    compact_session, estimate_session_tokens, should_compact, CompactionConfig, CompactionResult,
 };
 use crate::config::RuntimeFeatureConfig;
 use crate::hooks::{HookRunResult, HookRunner};
@@ -86,6 +86,7 @@ pub struct TurnSummary {
     pub tool_results: Vec<ConversationMessage>,
     pub iterations: usize,
     pub usage: TokenUsage,
+    pub compacted: bool,
 }
 
 pub struct ConversationRuntime<C, T> {
@@ -97,6 +98,7 @@ pub struct ConversationRuntime<C, T> {
     max_iterations: usize,
     usage_tracker: UsageTracker,
     hook_runner: HookRunner,
+    compaction_config: Option<CompactionConfig>,
 }
 
 impl<C, T> ConversationRuntime<C, T>
@@ -141,12 +143,19 @@ where
             max_iterations: usize::MAX,
             usage_tracker,
             hook_runner: HookRunner::from_feature_config(&feature_config),
+            compaction_config: None,
         }
     }
 
     #[must_use]
     pub fn with_max_iterations(mut self, max_iterations: usize) -> Self {
         self.max_iterations = max_iterations;
+        self
+    }
+
+    #[must_use]
+    pub fn with_auto_compaction(mut self, config: CompactionConfig) -> Self {
+        self.compaction_config = Some(config);
         self
     }
 
@@ -158,6 +167,18 @@ where
         self.session
             .messages
             .push(ConversationMessage::user_text(user_input.into()));
+
+        let compacted = if let Some(config) = self.compaction_config {
+            if should_compact(&self.session, config) {
+                let result = compact_session(&self.session, config);
+                self.session = result.compacted_session;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
 
         let mut assistant_messages = Vec::new();
         let mut tool_results = Vec::new();
@@ -259,6 +280,7 @@ where
             tool_results,
             iterations,
             usage: self.usage_tracker.cumulative_usage(),
+            compacted,
         })
     }
 
@@ -406,7 +428,7 @@ mod tests {
         PermissionRequest,
     };
     use crate::prompt::{ProjectContext, SystemPromptBuilder};
-    use crate::session::{ContentBlock, MessageRole, Session};
+    use crate::session::{ContentBlock, ConversationMessage, MessageRole, Session};
     use crate::usage::TokenUsage;
     use std::path::PathBuf;
 
@@ -786,6 +808,52 @@ mod tests {
         assert_eq!(
             result.compacted_session.messages[0].role,
             MessageRole::System
+        );
+    }
+
+    #[test]
+    fn auto_compacts_session_in_run_turn_when_threshold_is_exceeded() {
+        struct SimpleApi;
+        impl ApiClient for SimpleApi {
+            fn stream(
+                &mut self,
+                _request: ApiRequest,
+            ) -> Result<Vec<AssistantEvent>, RuntimeError> {
+                Ok(vec![
+                    AssistantEvent::TextDelta("done".to_string()),
+                    AssistantEvent::MessageStop,
+                ])
+            }
+        }
+
+        let mut session = Session::new();
+        for _ in 0..3 {
+            session
+                .messages
+                .push(ConversationMessage::user_text("x".repeat(20_000)));
+        }
+
+        let mut runtime = ConversationRuntime::new(
+            session,
+            SimpleApi,
+            StaticToolExecutor::new(),
+            PermissionPolicy::new(PermissionMode::DangerFullAccess),
+            vec!["system".to_string()],
+        )
+        .with_auto_compaction(CompactionConfig {
+            preserve_recent_messages: 2,
+            max_estimated_tokens: 1,
+        });
+
+        let summary = runtime
+            .run_turn("new user message", None)
+            .expect("run_turn should succeed even when auto-compacting");
+
+        assert!(summary.compacted, "TurnSummary should report compaction occurred");
+        assert_eq!(
+            runtime.session().messages[0].role,
+            MessageRole::System,
+            "first message after compaction should be the summary"
         );
     }
 

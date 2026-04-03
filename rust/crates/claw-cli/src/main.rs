@@ -2989,7 +2989,8 @@ fn build_runtime(
         permission_policy(permission_mode, &tool_registry),
         system_prompt,
         feature_config,
-    ))
+    )
+    .with_auto_compaction(runtime::CompactionConfig::default()))
 }
 
 struct CliPermissionPrompter {
